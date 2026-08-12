@@ -346,7 +346,7 @@ class SocialPreview {
 			? $external_image
 			: $local_image;
 		$global_image   = $this->get_global_image_url();
-		$display_title = '' !== $link_title
+		$display_title  = '' !== $link_title
 			? $link_title
 			: ( '' !== $stored_title ? $stored_title : __( 'Untitled Link', 'peakurl' ) );
 
