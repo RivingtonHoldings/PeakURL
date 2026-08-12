@@ -12,9 +12,11 @@ interface SocialPreviewTabProps {
 	socialDescription: string;
 	setSocialDescription: (value: string) => void;
 	socialImageFile: File | null;
+	socialImageUrl: string;
 	socialPreviewUrl: string;
 	showSocialImageRemove: boolean;
 	onSocialImageChange: (event: ChangeEvent<HTMLInputElement>) => void;
+	onSocialImageUrlChange: (value: string) => void;
 	onRemoveSocialImage: () => void;
 }
 
@@ -25,9 +27,11 @@ function SocialPreviewTab({
 	socialDescription,
 	setSocialDescription,
 	socialImageFile,
+	socialImageUrl,
 	socialPreviewUrl,
 	showSocialImageRemove,
 	onSocialImageChange,
+	onSocialImageUrlChange,
 	onRemoveSocialImage,
 }: SocialPreviewTabProps) {
 	const socialPreviewImageSource = sanitizeImageUrl(socialPreviewUrl);
@@ -87,6 +91,17 @@ function SocialPreviewTab({
 						</span>
 					) : null}
 				</div>
+				<p className="text-sm text-muted text-center">{__("or")}</p>
+				<Input
+					label={__("External Image URL")}
+					type="url"
+					value={socialImageUrl}
+					onChange={(event) =>
+						onSocialImageUrlChange(event.target.value)
+					}
+					placeholder="https://example.com/image.jpg"
+					className="form-control-surface-alt form-control-compact form-control-strong-focus"
+				/>
 				<div className="links-edit-drawer-preview-card">
 					{socialPreviewImageSource ? (
 						<div className="links-edit-drawer-preview-media">

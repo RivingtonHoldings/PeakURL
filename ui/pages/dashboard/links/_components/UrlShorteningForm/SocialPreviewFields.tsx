@@ -15,6 +15,8 @@ const SocialPreviewFields = ({
 	socialImageFile,
 	setSocialImageFile,
 	socialImagePreviewUrl,
+	socialImageUrl,
+	setSocialImageUrl,
 }: SocialPreviewFieldsProps) => {
 	const direction = isDocumentRtl() ? "rtl" : "ltr";
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -27,6 +29,10 @@ const SocialPreviewFields = ({
 			/\.(png|jpe?g|webp)$/i.test(nextFile.name);
 
 		setSocialImageFile(isSupportedImage ? nextFile : null);
+
+		if (isSupportedImage) {
+			setSocialImageUrl("");
+		}
 	};
 
 	const handleClearImage = () => {
@@ -148,6 +154,18 @@ const SocialPreviewFields = ({
 								</span>
 							) : null}
 						</div>
+						<p className="text-sm text-muted text-center">
+							{__("or")}
+						</p>
+						<Input
+							label={__("External Image URL")}
+							type="url"
+							value={socialImageUrl}
+							onChange={(event) =>
+								setSocialImageUrl(event.target.value)
+							}
+							placeholder="https://example.com/image.jpg"
+						/>
 					</div>
 				</div>
 			</div>
