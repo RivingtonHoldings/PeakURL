@@ -43,6 +43,6 @@ core/.env
 *.sw?
 
 # AI context files
-AGENTS.md
+# AGENTS.md
 CONTEXT.md
 CLAUDE.md
