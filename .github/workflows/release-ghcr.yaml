@@ -1,0 +1,161 @@
+name: Release GHCR
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-release-ghcr
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo, pdo_mysql, zip
+          tools: composer
+
+      - name: Install npm dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build release package
+        run: npm run release:build
+
+      - name: Resolve release version
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="$(tr -d '\n' < .version)"
+          EXPECTED_TAG="v${VERSION}"
+
+          if [ -z "$VERSION" ]; then
+            echo "The .version file is empty." >&2
+            exit 1
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+              echo "Expected a tag ref for push-triggered container runs." >&2
+              exit 1
+            fi
+
+            if [ "${GITHUB_REF_NAME}" != "${EXPECTED_TAG}" ]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match .version (${EXPECTED_TAG})." >&2
+              exit 1
+            fi
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$EXPECTED_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate GHCR image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.release.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.release.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.release.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=PeakURL
+            org.opencontainers.image.description=Official PeakURL container image built from the packaged release.
+            org.opencontainers.image.url=https://peakurl.org
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Create release image Dockerfile
+        shell: bash
+        env:
+          DOCKERFILE_PATH: ${{ runner.temp }}/PeakURL.Dockerfile
+        run: |
+          set -euo pipefail
+
+          cat > "$DOCKERFILE_PATH" <<'EOF'
+          FROM php:8.4-apache-bookworm
+
+          WORKDIR /var/www/html
+
+          RUN set -eux; \
+              apt-get update; \
+              apt-get install -y --no-install-recommends libicu-dev libzip-dev; \
+              docker-php-ext-install intl pdo_mysql zip; \
+              a2enmod rewrite headers expires; \
+              rm -rf /var/lib/apt/lists/*
+
+          COPY . /var/www/html/
+
+          RUN chown -R www-data:www-data /var/www/html
+
+          EXPOSE 80
+
+          CMD ["apache2-foreground"]
+          EOF
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v6
+        with:
+          context: release/peakurl
+          file: ${{ runner.temp }}/PeakURL.Dockerfile
+          push: true
+          pull: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=peakurl-ghcr-image
+          cache-to: type=gha,mode=max,scope=peakurl-ghcr-image
+
+      - name: Summarize GHCR publish
+        run: |
+          {
+            echo "## GHCR container publish"
+            echo
+            echo "- Version: \`${{ steps.release.outputs.version }}\`"
+            echo "- Tags: \`${{ steps.meta.outputs.tags }}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
+          } >> "$GITHUB_STEP_SUMMARY"
